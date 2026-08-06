@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        http-equiv="X-UA-Compatible"
+        content="IE=edge">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0">
+
+    <title>ABS Viewer</title>
+
+    <!-- ========================================================= -->
+    <!-- CSS -->
+    <!-- ========================================================= -->
+
+    <link
+        rel="stylesheet"
+        href="css/style.css">
+
+    <!-- ========================================================= -->
+    <!-- Vue 3 -->
+    <!-- ========================================================= -->
+
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+
+    <!-- ========================================================= -->
+    <!-- ThreeJS -->
+    <!-- ========================================================= -->
+
+    <script src="js/three.min.js"></script>
+
+</head>
+
+<body>
+
+<div id="app">
+
+    <!-- ========================================================= -->
+    <!-- Toolbar -->
+    <!-- ========================================================= -->
+
+    <header class="toolbar">
+
+        <div class="toolbar-left">
+
+            <button @click="openABS">
+
+                📂 Open ABS
+
+            </button>
+
+            <button @click="reloadCurrent">
+
+                🔄 Reload
+
+            </button>
+
+            <button @click="clearProject">
+
+                🗑 Clear
+
+            </button>
+
+        </div>
+
+
+        <div class="toolbar-center">
+
+            <span>
+
+                {{ projectName }}
+
+            </span>
+
+        </div>
+
+
+        <div class="toolbar-right">
+
+            <button @click="fitView">
+
+                Fit
+
+            </button>
+
+            <button @click="toggleGrid">
+
+                Grid
+
+            </button>
+
+            <button @click="toggleDimension">
+
+                Dimension
+
+            </button>
+
+        </div>
+
+    </header>
+
+
+    <!-- ========================================================= -->
+    <!-- Main -->
+    <!-- ========================================================= -->
+
+    <main class="main-layout">
+
+
+        <!-- ===================================================== -->
+        <!-- CENTER -->
+        <!-- ===================================================== -->
+
+        <section class="center-panel">
+            <!-- =============================================== -->
+            <!-- File Groups (one abs-table per file, toggle) -->
+            <!-- =============================================== -->
+
+            <div
+                class="file-group"
+                v-for="file in files"
+                :key="file.path">
+
+                <!-- Toggle header row: file name + total weight -->
+                <div
+                    class="file-group-header"
+                    @click="toggleFile(file)"
+                    :class="{expanded:isFileExpanded(file)}">
+
+                    <span class="file-group-arrow">
+
+                        {{ isFileExpanded(file) ? '▼' : '▶' }}
+
+                    </span>
+
+                    <span class="file-group-name">
+
+                        {{ file.name }}
+
+                    </span>
+
+                    <span class="file-group-count">
+
+                        {{ fileRecords(file).length }} pos
+
+                    </span>
+
+                    <div style="display: flex; flex-direction: column; text-align: right; min-width: 120px;">
+                        <span v-if="fileRebarWeight(file) > 0" class="file-group-weight" style="font-size: 12px; color: #0a8b49;">
+                            Rebar: {{ fileRebarWeight(file).toFixed(2) }} kg
+                        </span>
+                        <span v-if="fileMeshWeight(file) > 0" class="file-group-weight" style="font-size: 12px; color: #c26c06;">
+                            Mesh: {{ fileMeshWeight(file).toFixed(2) }} kg
+                        </span>
+                        <span v-if="fileRebarWeight(file) === 0 && fileMeshWeight(file) === 0" class="file-group-weight" style="font-size: 12px;">
+                            0.00 kg
+                        </span>
+                    </div>
+
+                </div>
+
+
+                <!-- Expanded reinforcement table for this file -->
+                <table
+                    v-show="isFileExpanded(file)"
+                    class="abs-table">
+
+                    <thead>
+
+                    <tr>
+
+                        <th>Preview</th>
+
+                        <th>Pos</th>
+
+                        <th>Type</th>
+
+                        <th>Ø</th>
+
+                        <th>Qty</th>
+
+                        <th>Length</th>
+
+                        <th>Weight</th>
+
+                        <th>SumWeight</th>
+
+                        <th>Grade</th>
+
+                        <th>Start Element</th>
+
+                        <th>End Element</th>
+
+                    </tr>
+
+                    </thead>
+
+
+                    <tbody>
+
+                    <tr
+
+                        v-for="item in fileRecords(file)"
+
+                        :key="item.id"
+
+                        @click="selectRecord(item)"
+
+                        :class="{selected:selectedRecord===item, 'bfma-row': item.type === 'BFMA'}"
+                    >
+
+                        <td>
+
+                            <canvas
+
+                                class="thumb"
+
+                                :id="'thumb_'+item.id">
+
+                            </canvas>
+
+                        </td>
+
+                        <td>
+
+                            {{ item.position }}
+
+                        </td>
+
+                        <td>
+
+                            {{ item.type }}
+
+                        </td>
+
+                        <td style="font-weight: 600;">
+                            <!-- For mesh, show matType (e.g., BT11) instead of diameter 0 -->
+                            {{ item.type === 'BFMA' ? item.matType : item.diameter }}
+                        </td>
+
+                        <td>
+
+                            {{ item.quantity }}
+
+                        </td>
+
+                        <td :class="{
+                                'length-warn-1': item.type !== 'BFMA' && item.length > 12000 && item.length <= 14000,
+                                'length-warn-2': item.type !== 'BFMA' && item.length > 14000
+                            }"
+                        >
+
+                            {{ item.length }}
+
+                        </td>
+
+                        <td>
+
+                            {{ item.weight }}
+
+                        </td>
+
+                        <td>
+
+                            {{ item.weightTotal.toFixed(2) }}
+
+                        </td>
+
+                        <td>
+
+                            {{ item.grade }}
+
+                        </td>
+
+                        <td>
+                            <span v-if="item.startCoupler">
+                                {{ item.startCoupler.manufacturer }}-{{ item.startCoupler.type }}
+                            </span>
+                        </td>
+
+                        <td>
+                            <span v-if="item.endCoupler">
+                                {{ item.endCoupler.manufacturer }}-{{ item.endCoupler.type }}
+                            </span>
+                        </td>
+
+                    </tr>
+
+                    </tbody>
+
+
+                    <tfoot>
+
+                    <tr>
+
+                        <td colspan="6">
+
+                            Total
+
+                        </td>
+
+                        <td>
+
+                            {{ fileBars(file) }}
+
+                        </td>
+
+                        <td></td>
+
+                        <td style="text-align: right; padding-right: 10px;" colspan="3">
+                            <div v-if="fileRebarWeight(file) > 0">
+                                Rebar: {{ fileRebarWeight(file).toFixed(2) }}
+                            </div>
+                            <div v-if="fileMeshWeight(file) > 0">
+                                Mesh: {{ fileMeshWeight(file).toFixed(2) }}
+                            </div>
+                        </td>
+
+                    </tr>
+
+                    </tfoot>
+
+                </table>
+
+            </div>
+
+
+            <!-- Empty state -->
+            <div
+                v-if="!files.length"
+                class="empty-table">
+
+                Open ABS files to begin
+
+            </div>
+
+        </section>
+
+
+        <!-- ===================================================== -->
+        <!-- RIGHT -->
+        <!-- ===================================================== -->
+
+        <section class="right-panel">
+
+
+            <!-- =============================================== -->
+            <!-- Viewer Tabs -->
+            <!-- =============================================== -->
+
+            <div class="viewer-tabs">
+
+                <button
+
+                    @click="viewerMode='2d'"
+
+                    :class="{active:viewerMode==='2d'}">
+
+                    2D
+
+                </button>
+
+                <button
+
+                    @click="viewerMode='3d'"
+
+                    :class="{active:viewerMode==='3d'}">
+
+                    3D
+
+                </button>
+
+            </div>
+
+
+            <!-- =============================================== -->
+            <!-- Viewer -->
+            <!-- =============================================== -->
+
+            <div class="viewer">
+
+
+                <canvas
+
+                    id="viewer2d"
+
+                    v-show="viewerMode==='2d'">
+
+                </canvas>
+
+
+                <div
+
+                    id="viewer3d"
+
+                    v-show="viewerMode==='3d'">
+
+                    <!-- HTML overlay for persistent segment dimension labels.
+                         Each label is a DOM element positioned over the
+                         WebGL canvas; updated every frame by Viewer3D. -->
+                    <div id="segment-labels"></div>
+
+                </div>
+
+            </div>
+
+
+            <!-- =============================================== -->
+            <!-- Property -->
+            <!-- =============================================== -->
+
+            <div class="property-panel">
+
+
+                <div class="panel-title">
+
+                    Properties
+
+                </div>
+
+
+                <table v-if="selectedRecord">
+
+                    <tr>
+
+                        <td>Position</td>
+
+                        <td>{{ selectedRecord.position }}</td>
+
+                    </tr>
+
+                    <tr>
+
+                        <td>Type</td>
+
+                        <td>{{ selectedRecord.type }}</td>
+
+                    </tr>
+
+                    <tr>
+
+                        <td>Diameter</td>
+
+                        <td>{{ selectedRecord.diameter }}</td>
+
+                    </tr>
+
+                    <tr>
+
+                        <td>Quantity</td>
+
+                        <td>{{ selectedRecord.quantity }}</td>
+
+                    </tr>
+
+                    <tr>
+
+                        <td>Length</td>
+
+                        <td>{{ selectedRecord.length }}</td>
+
+                    </tr>
+
+                    <tr>
+
+                        <td>Weight</td>
+
+                        <td>{{ selectedRecord.weight }}</td>
+
+                    </tr>
+
+                    <tr>
+
+                        <td>Grade</td>
+
+                        <td>{{ selectedRecord.grade }}</td>
+
+                    </tr>
+
+                    <tr v-if="selectedRecord.startCoupler">
+
+                        <td>Start Element</td>
+
+                        <td>{{ selectedRecord.startCoupler.manufacturer }}-{{ selectedRecord.startCoupler.type }}</td>
+
+                    </tr>
+
+                    <tr v-if="selectedRecord.endCoupler">
+
+                        <td>End Element</td>
+
+                        <td>{{ selectedRecord.endCoupler.manufacturer }}-{{ selectedRecord.endCoupler.type }}</td>
+
+                    </tr>
+
+                    <tr>
+
+                        <td>File</td>
+
+                        <td>{{ selectedRecord.file }}</td>
+
+                    </tr>
+
+                </table>
+
+            </div>
+
+        </section>
+
+    </main>
+
+
+    <!-- ========================================================= -->
+    <!-- Footer -->
+    <!-- ========================================================= -->
+
+    <footer class="statusbar">
+
+        <div>
+
+            Ready
+
+        </div>
+
+        <div>
+
+            {{ status }}
+
+        </div>
+
+    </footer>
+
+</div>
+
+
+<!-- ============================================================= -->
+<!-- APP -->
+<!-- ============================================================= -->
+
+<script src="js/app.js"></script>
+
+</body>
+
+</html>
