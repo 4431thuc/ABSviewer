@@ -918,10 +918,25 @@ const Viewer2D = {
     drawDimensions(ctx, pts) {
         const b = computeBounds(pts);
 
+        // Centroid of the polyline – dimension labels are offset AWAY from
+        // the centroid so they stay on the OUTSIDE of the shape.  For closed
+        // loops (e.g. rectangular stirrups) this prevents dimension lines
+        // from overlapping inside the reinforcement.
+        let cx = 0;
+        let cy = 0;
+        for (const p of pts) {
+            cx += p[0] || 0;
+            cy += p[1] || 0;
+        }
+        if (pts.length) {
+            cx /= pts.length;
+            cy /= pts.length;
+        }
+
         if (this.record && this.record.type === 'BFMA') {
             // For mesh, show overall length and width dimensions.
-            this.drawDimension(ctx, [b.minX, b.minY], [b.maxX, b.minY], fmtLength(b.maxX - b.minX), 28);
-            this.drawDimension(ctx, [b.maxX, b.minY], [b.maxX, b.maxY], fmtLength(b.maxY - b.minY), 28);
+            this.drawDimension(ctx, [b.minX, b.minY], [b.maxX, b.minY], fmtLength(b.maxX - b.minX), 28, cx, cy);
+            this.drawDimension(ctx, [b.maxX, b.minY], [b.maxX, b.maxY], fmtLength(b.maxY - b.minY), 28, cx, cy);
         } else {
             // Overall length dimension for rebar removed as per request.
 
@@ -931,19 +946,37 @@ const Viewer2D = {
                 const c = pts[i];
                 const len = Math.hypot(c[0] - a[0], c[1] - a[1]);
                 if (len > 0) {
-                    this.drawDimension(ctx, a, c, fmtLength(len), 16);
+                    this.drawDimension(ctx, a, c, fmtLength(len), 16, cx, cy);
                 }
             }
         }
     },
 
-    /** Draw a dimension line with extension lines, arrows and a label. */
-    drawDimension(ctx, a, b, label, perpOffset) {
+    /** Draw a dimension line with extension lines, arrows and a label.
+     *  The line is offset perpendicular to the segment.  When a centroid
+     *  (cx, cy) is supplied, the offset side is chosen so the dimension
+     *  sits OUTSIDE the shape (away from the centroid). */
+    drawDimension(ctx, a, b, label, perpOffset, cx, cy) {
         const pa = this.toScreen(a);
         const pb = this.toScreen(b);
         const ang = Math.atan2(pb.y - pa.y, pb.x - pa.x);
-        const nx = -Math.sin(ang);
-        const ny = Math.cos(ang);
+
+        // Perpendicular direction to the segment (two possible sides).
+        let nx = -Math.sin(ang);
+        let ny = Math.cos(ang);
+
+        // Flip to the side pointing away from the shape centroid.
+        if (typeof cx === 'number' && typeof cy === 'number') {
+            const mx = (a[0] + b[0]) / 2;
+            const my = (a[1] + b[1]) / 2;
+            const outX = mx - cx;
+            const outY = my - cy;
+            if (nx * outX + ny * outY < 0) {
+                nx = -nx;
+                ny = -ny;
+            }
+        }
+
         const d1 = { x: pa.x + nx * perpOffset, y: pa.y + ny * perpOffset };
         const d2 = { x: pb.x + nx * perpOffset, y: pb.y + ny * perpOffset };
 
@@ -1264,7 +1297,15 @@ const app = Vue.createApp({
             rafId: null,
             // Persistent segment dimension labels (HTML overlay)
             segmentLabelEls: [],
-            segmentLabelMids: []
+            segmentLabelMids: [],
+            // Resizable panels
+            rightPanelWidth: 430,
+            viewerHeight: 400,
+            _resizeMode: null,
+            _startX: 0,
+            _startY: 0,
+            _startWidth: 0,
+            _startHeight: 0
         };
     },
 
@@ -1505,6 +1546,88 @@ const app = Vue.createApp({
             return file.bars || 0;
         },
 
+        /** Number of rebar positions (non-BFMA) in a file. */
+        fileRebarCount(file) {
+            return (file.records || []).filter(r => r.type !== 'BFMA').length;
+        },
+
+        /** Number of mesh positions (BFMA) in a file. */
+        fileMeshCount(file) {
+            return (file.records || []).filter(r => r.type === 'BFMA').length;
+        },
+
+        /** Total quantity of rebar (non-BFMA) in a file. */
+        fileRebarQty(file) {
+            return (file.records || [])
+                .filter(r => r.type !== 'BFMA')
+                .reduce((s, r) => s + (r.quantity || 0), 0);
+        },
+
+        /** Total quantity of mesh (BFMA) in a file. */
+        fileMeshQty(file) {
+            return (file.records || [])
+                .filter(r => r.type === 'BFMA')
+                .reduce((s, r) => s + (r.quantity || 0), 0);
+        },
+
+        /** Total number of start couplers in a file. */
+        fileStartCouplerCount(file) {
+            return (file.records || [])
+                .filter(r => r.startCoupler)
+                .reduce((s, r) => s + (r.quantity || 0), 0);
+        },
+
+        /** Total number of end couplers in a file. */
+        fileEndCouplerCount(file) {
+            return (file.records || [])
+                .filter(r => r.endCoupler)
+                .reduce((s, r) => s + (r.quantity || 0), 0);
+        },
+
+        /** The dominant (most common) grade among rebar in a file. */
+        fileDominantGrade(file) {
+            const map = {};
+            for (const r of (file.records || [])) {
+                if (r.type === 'BFMA') continue;
+                const g = r.grade || '';
+                if (!g) continue;
+                map[g] = (map[g] || 0) + (r.quantity || 1);
+            }
+            let best = '';
+            let bestQty = 0;
+            for (const g in map) {
+                if (map[g] > bestQty) {
+                    bestQty = map[g];
+                    best = g;
+                }
+            }
+            return best;
+        },
+
+        /** True if this record's grade differs from the file's dominant grade. */
+        isGradeDifferent(file, item) {
+            if (!file || !item || item.type === 'BFMA') return false;
+            const dom = this.fileDominantGrade(file);
+            if (!dom) return false;
+            return (item.grade || '') !== dom;
+        },
+
+        /** Convert a length in mm to a clean cm value. */
+        fmtCm(mm) {
+            const v = (mm || 0) / 10;
+            return Math.round(v * 100) / 100;
+        },
+
+        /** Display the bar diameter (round bar) or mesh code (mesh). */
+        diaDisplay(rec) {
+            if (!rec) return '';
+            if (rec.type === 'BFMA') {
+                // Mesh: show the mesh code, e.g. Q125A or BT16.
+                return rec.matType || '';
+            }
+            return 'Ø' + rec.diameter;
+        },
+
         /** Select a record in the table. */
         selectRecord(item) {
             this.selectedRecord = item;
@@ -1653,6 +1776,83 @@ const app = Vue.createApp({
         init2D() {
             const canvas = document.getElementById('viewer2d');
             if (canvas) Viewer2D.init(canvas);
+        },
+
+        /* ------------------------------------------------------------------
+         * Resizers (drag to resize right-panel width / viewer height)
+         * ---------------------------------------------------------------- */
+
+        initResizers() {
+            const panelResizer = document.querySelector('.resizer-vertical-right-panel');
+            const viewerResizer = document.querySelector('.resizer-horizontal-viewer');
+
+            if (panelResizer) {
+                panelResizer.addEventListener('mousedown', (e) => this.startResizePanel(e));
+            }
+            if (viewerResizer) {
+                viewerResizer.addEventListener('mousedown', (e) => this.startResizeViewer(e));
+            }
+            window.addEventListener('mousemove', (e) => this.onResizeMove(e));
+            window.addEventListener('mouseup', () => this.endResize());
+        },
+
+        startResizePanel(e) {
+            e.preventDefault();
+            this._resizeMode = 'panel';
+            this._startX = e.clientX;
+            this._startWidth = this.rightPanelWidth;
+            const el = document.querySelector('.resizer-vertical-right-panel');
+            if (el) el.classList.add('active');
+        },
+
+        startResizeViewer(e) {
+            e.preventDefault();
+            this._resizeMode = 'viewer';
+            this._startY = e.clientY;
+            this._startHeight = this.viewerHeight;
+            const el = document.querySelector('.resizer-horizontal-viewer');
+            if (el) el.classList.add('active');
+        },
+
+        onResizeMove(e) {
+            if (this._resizeMode === 'panel') {
+                // The resizer sits on the LEFT edge of the right-panel.
+                // Dragging LEFT (dx < 0) widens the panel; dragging RIGHT
+                // (dx > 0) narrows it – so we subtract dx.
+                const dx = e.clientX - this._startX;
+                const w = clamp(this._startWidth - dx, 350, 600);
+                this.rightPanelWidth = w;
+                document.documentElement.style.setProperty('--right-width', w + 'px');
+                this.onResize();
+            } else if (this._resizeMode === 'viewer') {
+                const dy = e.clientY - this._startY;
+                const h = clamp(this._startHeight + dy, 400, 600);
+                this.viewerHeight = h;
+                const viewer = document.querySelector('.viewer');
+                if (viewer) {
+                    viewer.style.height = h + 'px';
+                    viewer.style.flex = '0 0 auto';
+                }
+                this.onResize();
+            }
+        },
+
+        endResize() {
+            this._resizeMode = null;
+            document.querySelectorAll('.resizer-vertical-right-panel, .resizer-horizontal-viewer')
+                .forEach(el => el.classList.remove('active'));
+            // Re-fit the active viewer after the drag so the content is
+            // regenerated at the new aspect ratio (avoids distortion).
+            this.$nextTick(() => {
+                if (this.viewerMode === '2d') {
+                    Viewer2D.resize();
+                    Viewer2D.setRecord(this.selectedRecord);
+                    Viewer2D.fit();
+                } else {
+                    this.onResize3D();
+                    this.render3D(this.selectedRecord);
+                }
+            });
         },
 
         /* ------------------------------------------------------------------
@@ -1991,6 +2191,7 @@ const app = Vue.createApp({
         onResize() {
             Viewer2D.resize();
             this.onResize3D();
+            Viewer2D.render();
         }
     },
 
@@ -2017,6 +2218,7 @@ const app = Vue.createApp({
         this.loadSettings();
         this.init2D();
         this.init3D();
+        this.initResizers();
         this.setupThumbnailObserver();
         window.addEventListener('resize', this.onResize);
     },

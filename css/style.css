@@ -251,6 +251,8 @@ canvas{
 
         1fr
 
+        5px
+
         var(--right-width);
 
     overflow:hidden;
@@ -288,6 +290,8 @@ canvas{
 
     background:#fafbfd;
 
+    min-height:0;
+
 }
 
 
@@ -323,6 +327,8 @@ canvas{
 
     align-items:center;
 
+    gap:8px;
+
     padding:0 14px;
 
     font-weight:600;
@@ -330,6 +336,72 @@ canvas{
     background:#f7f8fb;
 
     border-bottom:1px solid var(--border);
+
+}
+
+
+/*==============================================================================
+    Property Title – Position Badge + Info
+    ------------------------------------------------------------------
+    • .pos-badge   : wraps the position number
+    • .pos-ellipse : ellipse border (round bar / rebar)
+    • .pos-rect    : rectangle border (mesh)
+    • .pos-info    : "125 x Ø16 L = 1090 cm"
+==============================================================================*/
+
+.pos-badge{
+
+    display:inline-flex;
+
+    align-items:center;
+
+    justify-content:center;
+
+    min-width:26px;
+
+    height:26px;
+
+    padding:0 6px;
+
+    font-size:13px;
+
+    font-weight:700;
+
+    color:#252a34;
+
+    background:#fff;
+
+    flex-shrink:0;
+
+}
+
+.pos-ellipse{
+
+    border:2px solid var(--primary);
+
+    border-radius:50%;
+
+}
+
+.pos-rect{
+
+    border:2px solid #c26c06;
+
+    border-radius:4px;
+
+}
+
+.pos-info{
+
+    font-weight:600;
+
+    color:#252a34;
+
+    white-space:nowrap;
+
+    overflow:hidden;
+
+    text-overflow:ellipsis;
 
 }
 
@@ -866,7 +938,9 @@ canvas{
 
 .abs-table tfoot tr{
 
-    height:42px;
+    height:auto;
+
+    min-height:42px;
 
     background:#f2f5f9;
 
@@ -879,6 +953,32 @@ canvas{
     font-weight:600;
 
     text-align:center;
+
+    padding:4px 6px;
+
+    font-size:12px;
+
+}
+
+.abs-table tfoot td:first-child{
+
+    font-weight:700;
+
+    text-align:left;
+
+    padding-left:14px;
+
+}
+
+.abs-table tfoot td > div{
+
+    line-height:1.5;
+
+    white-space:nowrap;
+
+    overflow:hidden;
+
+    text-overflow:ellipsis;
 
 }
 
@@ -1090,6 +1190,13 @@ canvas{
     font-weight: bold;
 }
 
+/* Highlight a rebar whose grade differs from the file's dominant grade */
+.grade-diff {
+    background-color: #ffd7d7 !important;
+    color: #a41212 !important;
+    font-weight: bold;
+}
+
 /*==============================================================================
     ABS Viewer
     style.css
@@ -1112,13 +1219,71 @@ canvas{
 
 .viewer{
 
-    flex:1;
+    flex:0 0 auto;
+
+    height:400px;
 
     position:relative;
 
     overflow:hidden;
 
     background:#f5f7fb;
+
+}
+
+
+/*==============================================================================
+    Resizers
+    ------------------------------------------------------------------
+    • resizer-vertical-right-panel : drag to change right-panel width
+      (min 350px, max 600px)
+    • resizer-horizontal-viewer   : drag to change viewer height
+      (min 400px, max 600px)
+==============================================================================*/
+
+.resizer-vertical-right-panel{
+
+    width:5px;
+
+    cursor:col-resize;
+
+    background:transparent;
+
+    transition:background .15s;
+
+    flex-shrink:0;
+
+    z-index:30;
+
+}
+
+.resizer-vertical-right-panel:hover,
+.resizer-vertical-right-panel.active{
+
+    background:var(--primary);
+
+}
+
+.resizer-horizontal-viewer{
+
+    height:5px;
+
+    cursor:row-resize;
+
+    background:transparent;
+
+    transition:background .15s;
+
+    flex-shrink:0;
+
+    z-index:30;
+
+}
+
+.resizer-horizontal-viewer:hover,
+.resizer-horizontal-viewer.active{
+
+    background:var(--primary);
 
 }
 
@@ -1282,7 +1447,9 @@ canvas{
 
 .property-panel{
 
-    height:260px;
+    flex:1;
+
+    min-height:0;
 
     background:white;
 
@@ -1300,7 +1467,7 @@ canvas{
 
 .property-panel tr{
 
-    height:34px;
+    height:30px;
 
 }
 

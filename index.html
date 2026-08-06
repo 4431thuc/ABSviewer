@@ -272,7 +272,7 @@
 
                         </td>
 
-                        <td>
+                        <td :class="{'grade-diff': isGradeDifferent(file, item)}">
 
                             {{ item.grade }}
 
@@ -299,27 +299,39 @@
 
                     <tr>
 
-                        <td colspan="6">
-
-                            Total
-
-                        </td>
+                        <td>Total</td>
 
                         <td>
-
-                            {{ fileBars(file) }}
-
+                            <div v-if="fileRebarCount(file) > 0">Rebar: {{ fileRebarCount(file) }}</div>
+                            <div v-if="fileMeshCount(file) > 0">Mesh: {{ fileMeshCount(file) }}</div>
                         </td>
 
                         <td></td>
 
-                        <td style="text-align: right; padding-right: 10px;" colspan="3">
-                            <div v-if="fileRebarWeight(file) > 0">
-                                Rebar: {{ fileRebarWeight(file).toFixed(2) }}
-                            </div>
-                            <div v-if="fileMeshWeight(file) > 0">
-                                Mesh: {{ fileMeshWeight(file).toFixed(2) }}
-                            </div>
+                        <td></td>
+
+                        <td>
+                            <div v-if="fileRebarQty(file) > 0">Rebar: {{ fileRebarQty(file) }}</div>
+                            <div v-if="fileMeshQty(file) > 0">Mesh: {{ fileMeshQty(file) }}</div>
+                        </td>
+
+                        <td></td>
+
+                        <td></td>
+
+                        <td>
+                            <div v-if="fileRebarWeight(file) > 0">Rebar: {{ fileRebarWeight(file).toFixed(2) }}</div>
+                            <div v-if="fileMeshWeight(file) > 0">Mesh: {{ fileMeshWeight(file).toFixed(2) }}</div>
+                        </td>
+
+                        <td></td>
+
+                        <td>
+                            <div v-if="fileStartCouplerCount(file) > 0">{{ fileStartCouplerCount(file) }}</div>
+                        </td>
+
+                        <td>
+                            <div v-if="fileEndCouplerCount(file) > 0">{{ fileEndCouplerCount(file) }}</div>
                         </td>
 
                     </tr>
@@ -341,6 +353,15 @@
             </div>
 
         </section>
+
+
+        <!-- ===================================================== -->
+        <!-- RIGHT PANEL RESIZER (drag to change right-panel width) -->
+        <!-- ===================================================== -->
+
+        <div
+            class="resizer-vertical-right-panel"
+            title="Drag to resize right panel width"></div>
 
 
         <!-- ===================================================== -->
@@ -412,6 +433,15 @@
 
 
             <!-- =============================================== -->
+            <!-- VIEWER RESIZER (drag to change viewer height) -->
+            <!-- =============================================== -->
+
+            <div
+                class="resizer-horizontal-viewer"
+                title="Drag to resize viewer height"></div>
+
+
+            <!-- =============================================== -->
             <!-- Property -->
             <!-- =============================================== -->
 
@@ -420,7 +450,29 @@
 
                 <div class="panel-title">
 
-                    Properties
+                    <template v-if="selectedRecord">
+
+                        <span
+                            class="pos-badge"
+                            :class="selectedRecord.type === 'BFMA' ? 'pos-rect' : 'pos-ellipse'">
+
+                            {{ selectedRecord.position }}
+
+                        </span>
+
+                        <span class="pos-info">
+
+                            {{ selectedRecord.quantity }} x {{ diaDisplay(selectedRecord) }} L = {{ fmtCm(selectedRecord.length) }} cm
+
+                        </span>
+
+                    </template>
+
+                    <template v-else>
+
+                        Properties
+
+                    </template>
 
                 </div>
 
@@ -429,41 +481,9 @@
 
                     <tr>
 
-                        <td>Position</td>
-
-                        <td>{{ selectedRecord.position }}</td>
-
-                    </tr>
-
-                    <tr>
-
                         <td>Type</td>
 
                         <td>{{ selectedRecord.type }}</td>
-
-                    </tr>
-
-                    <tr>
-
-                        <td>Diameter</td>
-
-                        <td>{{ selectedRecord.diameter }}</td>
-
-                    </tr>
-
-                    <tr>
-
-                        <td>Quantity</td>
-
-                        <td>{{ selectedRecord.quantity }}</td>
-
-                    </tr>
-
-                    <tr>
-
-                        <td>Length</td>
-
-                        <td>{{ selectedRecord.length }}</td>
 
                     </tr>
 
