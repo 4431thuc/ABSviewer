@@ -21,6 +21,9 @@
  *     object at parse time to avoid repeated O(n) filtering on every render.
  * ========================================================================== */
 
+/** Display offset for overlapping stirrup hooks (in mm). */
+const DISPLAY_STIRRUP_OVERLAP_OFFSET = 30;
+
 'use strict';
 
 /* =============================================================================
@@ -216,9 +219,10 @@ const ABSParser = {
             endCoupler = { manufacturer: endCouplerManufacturer, type: endCouplerType };
         }
 
-        const geometry = this.buildGeometry(group, G, blocks, headerLength, width, height);
-        const pts = (geometry.points && geometry.points.length) ? geometry.points : [[0, 0, 0], [headerLength || 1, 0, 0]];
-        const bounds = computeBounds(pts);
+        const originalGeometry = this.buildGeometry(group, G, blocks, headerLength, width, height);
+        const displayGeometry = this.createDisplayGeometry(originalGeometry);
+        const originalPts = (originalGeometry.points && originalGeometry.points.length) ? originalGeometry.points : [[0, 0, 0], [headerLength || 1, 0, 0]];
+        const bounds = computeBounds(originalPts);
 
         const rec = {
             id: 'f' + fileIndex + '_r' + index,
@@ -234,10 +238,10 @@ const ABSParser = {
             matType,
             width,
             height,
-            geometry,
+            geometry: originalGeometry,
             startCoupler,
             endCoupler,
-            preview: geometry,
+            preview: displayGeometry, // Use display geometry for previews and viewers
             bounds,
             file: fileName,
             fileIndex,
@@ -246,6 +250,100 @@ const ABSParser = {
         };
         rec.checksumOK = this.verifyChecksum(text);
         return rec;
+    },
+
+    /**
+     * Creates a display-only geometry by offsetting overlapping hook segments.
+     * This is for visualization only and does not change the true geometry.
+     * @param {object} originalGeometry The original geometry object { points, is3D, length, angles }
+     * @returns {object} A new geometry object for display.
+     */
+    createDisplayGeometry(originalGeometry) {
+        const points = originalGeometry.points;
+        if (!points || points.length < 3) {
+            return originalGeometry; // Not a closed shape or too short
+        }
+
+        // A simple heuristic for stirrups: closed or nearly-closed shapes.
+        const start = points[0];
+        const end = points[points.length - 1];
+        const isClosedShape = Math.hypot(end[0] - start[0], end[1] - start[1], end[2] - start[2]) < (originalGeometry.length * 0.05);
+
+        if (!isClosedShape) {
+            return originalGeometry;
+        }
+
+        const newPoints = points.map(p => [...p]); // Create a mutable copy
+        const offset = DISPLAY_STIRRUP_OVERLAP_OFFSET;
+        const epsilon = 1e-3;
+
+        // Detect overlapping hook at the end of the polyline
+        // Example: Pn-2 -> Pn-1 -> Pn (end hook) overlaps P0 -> P1 -> P2 (start)
+        if (points.length >= 4) {
+            const p0 = points[0], p1 = points[1];
+            const pn_1 = points[points.length - 1], pn_2 = points[points.length - 2];
+
+            // Check if last segment (Pn-2 -> Pn-1) is collinear and overlapping with first segment (P0 -> P1)
+            const v_start = [p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]];
+            const v_end = [pn_1[0] - pn_2[0], pn_1[1] - pn_2[1], pn_1[2] - pn_2[2]];
+
+            const len_start = Math.hypot(...v_start);
+            const len_end = Math.hypot(...v_end);
+
+            if (len_start > epsilon && len_end > epsilon) {
+                const dir_start = v_start.map(c => c / len_start);
+                const dir_end = v_end.map(c => c / len_end);
+
+                // Check for collinearity (dot product is ~1 or ~-1)
+                const dot = dir_start.reduce((sum, val, i) => sum + val * dir_end[i], 0);
+
+                if (Math.abs(Math.abs(dot) - 1) < epsilon) {
+                    // Segments are parallel. Check for overlap.
+                    // A simple check is if Pn-1 is on the line segment P0-P1.
+                    const dist_start = Math.hypot(pn_1[0] - p0[0], pn_1[1] - p0[1], pn_1[2] - p0[2]);
+                    const dist_end = Math.hypot(pn_1[0] - p1[0], pn_1[1] - p1[1], pn_1[2] - p1[2]);
+
+                    if (Math.abs(dist_start + dist_end - len_start) < epsilon) {
+                        // Pn-1 lies on the segment P0-P1. We have an overlap.
+                        // Calculate a perpendicular offset vector.
+                        // For 2D shapes, this is simple. For 3D, we need a consistent plane.
+                        let offsetVec;
+                        if (originalGeometry.is3D) {
+                            // For 3D, find a vector perpendicular to the segment and the "up" direction (e.g., Z-axis)
+                            // to keep the offset planar.
+                            const up = [0, 0, 1];
+                            offsetVec = [
+                                dir_start[1] * up[2] - dir_start[2] * up[1],
+                                dir_start[2] * up[0] - dir_start[0] * up[2],
+                                dir_start[0] * up[1] - dir_start[1] * up[0]
+                            ];
+                        } else {
+                            // For 2D, just rotate the direction vector by 90 degrees.
+                            offsetVec = [-dir_start[1], dir_start[0], 0];
+                        }
+
+                        const offsetLen = Math.hypot(...offsetVec);
+                        if (offsetLen > epsilon) {
+                            const normalizedOffset = offsetVec.map(c => c / offsetLen * offset);
+
+                            // Apply offset to the hook segments
+                            // We offset the last two points (the hook)
+                            newPoints[newPoints.length - 1] = [pn_1[0] + normalizedOffset[0], pn_1[1] + normalizedOffset[1], pn_1[2] + normalizedOffset[2]];
+                            newPoints[newPoints.length - 2] = [pn_2[0] + normalizedOffset[0], pn_2[1] + normalizedOffset[1], pn_2[2] + normalizedOffset[2]];
+
+                            // Also offset the point before the hook to blend the transition
+                            if (newPoints.length > 2) {
+                                const pn_3 = points[points.length - 3];
+                                newPoints[newPoints.length - 3] = [pn_3[0] + normalizedOffset[0] * 0.5, pn_3[1] + normalizedOffset[1] * 0.5, pn_3[2] + normalizedOffset[2] * 0.5];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Return a new geometry object for display
+        return { ...originalGeometry, points: newPoints };
     },
 
     /**
@@ -734,19 +832,21 @@ const Viewer2D = {
 
     onMouseUp() {
         this.dragging = false;
+        this.canvas.style.cursor = 'grab';
     },
 
     /** Set the record to display and fit it. */
     setRecord(record) {
+        if (this.record === record) return; // Avoid re-fitting if the same record is selected
         this.record = record;
         this.fit();
     },
 
     /** Fit the current record into the viewport with padding. */
     fit() {
-        const pts = this.currentPoints();
-        if (!pts || pts.length < 2) return;
-        const b = computeBounds(pts);
+        const displayPts = this.currentPoints();
+        if (!displayPts || displayPts.length < 2) return;
+        const b = this.record.bounds; // Use original bounds for fitting
         const w = this.canvas.clientWidth;
         const h = this.canvas.clientHeight;
         const pad = 70;
@@ -760,9 +860,10 @@ const Viewer2D = {
     },
 
     currentPoints() {
-        return this.record && this.record.preview && this.record.preview.points
-            ? this.record.preview.points
-            : null;
+        // Returns the points for DISPLAY purposes
+        if (!this.record || !this.record.preview) return null;
+        return this.record.preview.points;
+
     },
 
     toScreen(p) {
@@ -788,14 +889,16 @@ const Viewer2D = {
         if (this.showGrid) this.drawGrid(ctx, w, h);
 
         const pts = this.currentPoints();
-        if (!pts || pts.length < 2) {
+        const originalPts = this.record ? this.record.geometry.points : null;
+
+        if (!pts || pts.length < 2 || !originalPts) {
             this.drawEmpty(ctx, w, h);
             return;
         }
 
         this.drawBounds(ctx, pts);
         this.drawBar(ctx, pts);
-        if (this.showDimension) this.drawBendAngles(ctx, pts);
+        if (this.showDimension) this.drawBendAngles(ctx, originalPts);
         if (this.showDimension) this.drawDimensions(ctx, pts);
         this.drawScaleBar(ctx, w, h);
     },
@@ -938,13 +1041,14 @@ const Viewer2D = {
             this.drawDimension(ctx, [b.minX, b.minY], [b.maxX, b.minY], fmtLength(b.maxX - b.minX), 28, cx, cy);
             this.drawDimension(ctx, [b.maxX, b.minY], [b.maxX, b.maxY], fmtLength(b.maxY - b.minY), 28, cx, cy);
         } else {
-            // Overall length dimension for rebar removed as per request.
+            const originalPts = this.record.geometry.points;
 
             // Segment dimensions for rebar.
             for (let i = 1; i < pts.length; i++) {
                 const a = pts[i - 1];
                 const c = pts[i];
-                const len = Math.hypot(c[0] - a[0], c[1] - a[1]);
+                // Get original length for the label
+                const len = Math.hypot(originalPts[i][0] - originalPts[i-1][0], originalPts[i][1] - originalPts[i-1][1]);
                 if (len > 0) {
                     this.drawDimension(ctx, a, c, fmtLength(len), 16, cx, cy);
                 }
@@ -1017,12 +1121,13 @@ const Viewer2D = {
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
 
-        for (let i = 1; i < pts.length - 1; i++) {
-            const p0 = pts[i - 1];
-            const p1 = pts[i];
-            const p2 = pts[i + 1];
+        const originalPts = this.record.geometry.points;
+        for (let i = 1; i < originalPts.length - 1; i++) {
+            const p0 = originalPts[i - 1];
+            const p1 = originalPts[i];
+            const p2 = originalPts[i + 1];
 
-            const v1 = [p0[0] - p1[0], p0[1] - p1[1]];
+            const v1 = [p0[0] - p1[0], p0[1] - p1[1]]; // Use original points for angle calculation
             const v2 = [p2[0] - p1[0], p2[1] - p1[1]];
 
             const dot = v1[0] * v2[0] + v1[1] * v2[1];
@@ -1033,7 +1138,7 @@ const Viewer2D = {
             // Only show angles that are not 90 degrees (with a small tolerance)
             if (Math.abs(angleDeg - 90) < 0.1) continue;
 
-            const p = this.toScreen(p1);
+            const p = this.toScreen(pts[i]); // Use display points for label position
             const label = `${angleDeg.toFixed(1)}°`;
             const x = p.x + 12;
             const y = p.y - 12;
@@ -1167,6 +1272,7 @@ const OrbitControls = {
 
     onMouseUp() {
         this.isDragging = false;
+        this.domElement.style.cursor = 'grab';
     },
 
     onWheel(e) {
@@ -1219,7 +1325,7 @@ const OrbitControls = {
     },
 
     rotate(dx, dy) {
-        this.spherical.theta -= dx * 0.005;
+        this.spherical.theta += dx * 0.005;
         this.spherical.phi -= dy * 0.005;
         this.spherical.phi = clamp(this.spherical.phi, 0.05, Math.PI - 0.05);
     },
@@ -1255,11 +1361,12 @@ const OrbitControls = {
 
     /** Fit the camera to a THREE.Box3. */
     fitToBounds(box) {
-        if (!this.target || !box) return;
+        if (!this.target || !box || box.isEmpty()) return;
         const size = new THREE.Vector3();
         const center = new THREE.Vector3();
         box.getSize(size);
         box.getCenter(center);
+        if (size.length() === 0) return; // Avoid issues with zero-sized boxes
         this.target.copy(center);
         this.spherical.radius = Math.max(size.length() * 1.3, 1);
         this.update();
@@ -1278,9 +1385,9 @@ const app = Vue.createApp({
             expandedFiles: {},   // file.path -> true when its table is open
             selectedRecord: null,
             projectName: 'ABS Viewer',
+            allFilesExpanded: true,
             status: 'Ready',
             viewerMode: '2d',
-            showGrid: true,
             showDimension: true,
             loading: false,
             thumbnailObserver: null,
@@ -1290,7 +1397,6 @@ const app = Vue.createApp({
             camera3D: null,
             renderer3D: null,
             group3D: null,
-            gridHelper3D: null,
             axesHelper3D: null,
             dimBox3D: null,
             orbit3D: null,
@@ -1634,6 +1740,22 @@ const app = Vue.createApp({
             this.updateViewer();
         },
 
+        /** Toggle expand/collapse for all file tables. */
+        toggleAllFiles() {
+            if (this.allFilesExpanded) {
+                // Collapse all
+                this.expandedFiles = {};
+            } else {
+                // Expand all
+                const newExpanded = {};
+                for (const file of this.files) {
+                    newExpanded[file.path] = true;
+                }
+                this.expandedFiles = newExpanded;
+            }
+            this.allFilesExpanded = !this.allFilesExpanded;
+            this.$nextTick(() => this.setupThumbnailObserver());
+        },
         clearProject() {
             this.files = [];
             this.allRecords = [];
@@ -1641,6 +1763,7 @@ const app = Vue.createApp({
             this.selectedRecord = null;
             this.projectName = 'ABS Viewer';
             this.status = 'Ready';
+            this.allFilesExpanded = true;
             ThumbnailRenderer.cache.clear();
             this.recordIndex = null;
             Viewer2D.record = null; // Clear the 2D viewer content too.
@@ -1706,24 +1829,23 @@ const app = Vue.createApp({
 
         fitView() {
             if (this.viewerMode === '2d') {
-                Viewer2D.fit();
+                Viewer2D.fit(); 
             } else {
-                this.render3D(this.selectedRecord);
+                this.orbit3D.fitToBounds(new THREE.Box3().setFromObject(this.group3D));
             }
-        },
-
-        toggleGrid() {
-            this.showGrid = !this.showGrid;
-            Viewer2D.showGrid = this.showGrid;
-            if (this.gridHelper3D) this.gridHelper3D.visible = this.showGrid;
-            Viewer2D.render();
         },
 
         toggleDimension() {
             this.showDimension = !this.showDimension;
-            Viewer2D.showDimension = this.showDimension;
+            const segmentLabels = document.getElementById('segment-labels');
+            if (this.viewerMode === '3d' && segmentLabels) {
+                segmentLabels.style.display = this.showDimension ? '' : 'none';
+            } else {
+                Viewer2D.showDimension = this.showDimension;
+                Viewer2D.render();
+            }
             if (this.viewerMode === '3d') {
-                this.render3D(this.selectedRecord);
+                this.render3D(this.selectedRecord, false); // Don't force fit on dimension toggle
             } else {
                 Viewer2D.render();
             }
@@ -1844,13 +1966,10 @@ const app = Vue.createApp({
             // Re-fit the active viewer after the drag so the content is
             // regenerated at the new aspect ratio (avoids distortion).
             this.$nextTick(() => {
-                if (this.viewerMode === '2d') {
-                    Viewer2D.resize();
-                    Viewer2D.setRecord(this.selectedRecord);
-                    Viewer2D.fit();
-                } else {
-                    this.onResize3D();
-                    this.render3D(this.selectedRecord);
+                if (this.viewerMode === '2d') { 
+                    Viewer2D.resize(); 
+                } else { 
+                    this.onResize3D(); 
                 }
             });
         },
@@ -1879,7 +1998,7 @@ const app = Vue.createApp({
 
             // Grid + axes.
             const grid = mark(new THREE.GridHelper(1000, 20, 0x9aa7b8, 0xc8d2e0));
-            grid.visible = this.showGrid;
+            grid.visible = false; // Default grid to hidden in 3D
             scene.add(grid);
             const axes = mark(new THREE.AxesHelper(100));
             scene.add(axes);
@@ -1897,7 +2016,6 @@ const app = Vue.createApp({
             this.scene3D = scene;
             this.camera3D = camera;
             this.renderer3D = renderer;
-            this.gridHelper3D = grid;
             this.axesHelper3D = axes;
             this.group3D = group;
 
@@ -1957,7 +2075,7 @@ const app = Vue.createApp({
          *    - Red start marker at P0
          */
         render3D(record) {
-            if (!this.renderer3D) return;
+            if (!this.renderer3D || !this.scene3D) return;
             this.clear3DGroup();
             const mark = Vue.markRaw;
             this.group3D = mark(new THREE.Group());
@@ -1967,13 +2085,13 @@ const app = Vue.createApp({
                 return;
             }
 
-            const points = record.preview.points;
+            const displayPoints = record.preview.points;
             const dia = Math.max(record.diameter || 8, 4);
             const radius = dia / 2;
             const tubeColor = (record.type === 'BFMA') ? 0xc26c06 : 0x2d74ff;
 
             // Map [x, y, z] -> (x, z, y) so 2D plan shapes lie on the XZ grid.
-            const vecs = points.map(p => new THREE.Vector3(p[0], p[2] || 0, p[1] || 0));
+            const vecs = displayPoints.map(p => new THREE.Vector3(p[0], p[2] || 0, p[1] || 0));
 
             // ---- HTML overlay labels (one per straight segment) ----
             this.createSegmentLabels(vecs);
@@ -2054,21 +2172,8 @@ const app = Vue.createApp({
             const startMesh = mark(new THREE.Mesh(startGeo, startMat));
             startMesh.position.copy(vecs[0]);
             this.group3D.add(startMesh);
-
-            // ---- Optional bounding box ----
+            
             const box = new THREE.Box3().setFromObject(this.group3D);
-            if (this.showDimension) {
-                const boxGeo = mark(new THREE.BoxGeometry(1, 1, 1));
-                const boxMat = mark(new THREE.LineBasicMaterial({ color: 0xff6600 }));
-                const edges = mark(new THREE.EdgesGeometry(boxGeo));
-                this.dimBox3D = mark(new THREE.LineSegments(edges, boxMat));
-                const size = box.getSize(new THREE.Vector3());
-                const center = box.getCenter(new THREE.Vector3());
-                this.dimBox3D.scale.copy(size);
-                this.dimBox3D.position.copy(center);
-                this.group3D.add(this.dimBox3D);
-            }
-
             this.orbit3D.fitToBounds(box);
         },
 
@@ -2080,7 +2185,14 @@ const app = Vue.createApp({
             this.clearSegmentLabels();
 
             const container = document.getElementById('segment-labels');
+            if (container) {
+                // Ensure the container is visible if dimensions are on
+                container.style.display = this.showDimension ? '' : 'none';
+            }
+
             if (!container || !this.camera3D || !vecs || vecs.length < 2) return;
+
+            const originalVecs = this.selectedRecord.geometry.points.map(p => new THREE.Vector3(p[0], p[2] || 0, p[1] || 0));
 
             const els = [];
             const mids = [];
@@ -2088,8 +2200,8 @@ const app = Vue.createApp({
             for (let i = 0; i < vecs.length - 1; i++) {
                 const a = vecs[i];
                 const b = vecs[i + 1];
-                const len = a.distanceTo(b);
-                if (len < 1e-6) continue; // skip zero-length segments
+                // Calculate length from original geometry
+                const len = originalVecs[i].distanceTo(originalVecs[i+1]);
 
                 const label = document.createElement('div');
                 label.className = 'segment-label';
@@ -2112,6 +2224,11 @@ const app = Vue.createApp({
             const mids = this.segmentLabelMids;
             const container = document.getElementById('segment-labels');
             if (!container || !this.camera3D || !els.length) return;
+
+            if (!this.showDimension) {
+                container.style.display = 'none';
+                return;
+            }
 
             const rect = container.getBoundingClientRect();
             const w = rect.width;
@@ -2177,7 +2294,6 @@ const app = Vue.createApp({
             this.camera3D = null;
             this.renderer3D = null;
             this.group3D = null;
-            this.gridHelper3D = null;
             this.axesHelper3D = null;
             this.dimBox3D = null;
             this.orbit3D = null;
@@ -2200,7 +2316,7 @@ const app = Vue.createApp({
             if (mode === '2d') {
                 this.$nextTick(() => {
                     Viewer2D.resize();
-                    Viewer2D.setRecord(this.selectedRecord);
+                    Viewer2D.setRecord(this.selectedRecord); // This will fit the 2D view
                 });
             } else {
                 // Wait for v-show to make the container visible before
@@ -2208,7 +2324,7 @@ const app = Vue.createApp({
                 // and the renderer stays at a stale/zero resolution.
                 this.$nextTick(() => {
                     this.onResize3D();
-                    this.render3D(this.selectedRecord);
+                    this.render3D(this.selectedRecord); // This will auto-fit
                 });
             }
         }

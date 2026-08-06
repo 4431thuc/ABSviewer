@@ -379,7 +379,7 @@ canvas{
 
     border:2px solid var(--primary);
 
-    border-radius:50%;
+    border-radius:13px;
 
 }
 
@@ -779,17 +779,7 @@ canvas{
     Alternate Row
 ==============================================================================*/
 
-.abs-table tbody tr:nth-child(even){
 
-    background:#fbfcfd;
-
-}
-
-.abs-table tbody tr:nth-child(even):hover{
-
-    background:var(--hover);
-
-}
 
 
 /*==============================================================================
@@ -1403,7 +1393,7 @@ canvas{
 
     padding:8px 12px;
 
-    background:rgba(255,255,255,.9);
+    background:rgba(255,255,255,.7);
 
     border-radius:6px;
 
@@ -1656,7 +1646,7 @@ canvas{
 
     top:0;
 
-    background:rgba(255,255,255,.9);
+    background:rgba(255,255,255,.7);
 
     border:1px solid #d0d7e2;
 

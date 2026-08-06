@@ -61,12 +61,17 @@
 
             </button>
 
-            <button @click="clearProject">
+            <button @click="clearProject" v-if="files.length > 0">
 
                 🗑 Clear
 
             </button>
 
+            <button @click="toggleAllFiles" v-if="files.length > 0">
+
+                {{ allFilesExpanded ? '▶️ Collapse All' : '🔽 Expand All' }}
+
+            </button>
         </div>
 
 
@@ -89,17 +94,13 @@
 
             </button>
 
-            <button @click="toggleGrid">
-
-                Grid
-
-            </button>
 
             <button @click="toggleDimension">
 
                 Dimension
 
             </button>
+
 
         </div>
 
