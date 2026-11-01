@@ -3,6 +3,7 @@
 > [!IMPORTANT]
 > **ĐỌC KỸ TÀI LIỆU NÀY TRƯỚC KHI BẮT ĐẦU CHỈNH SỬA CODE!**  
 > Dự án **ABS Viewer** có những đặc thù kỹ thuật rất riêng biệt về kiến trúc không build step, tính tương thích kép giữa desktop/web, sự tương tác nhạy cảm giữa Vue 3 và Three.js WebGL, và các quy chuẩn kỹ thuật nghiêm ngặt của định dạng BVBS. Hãy tuân thủ nghiêm ngặt các nguyên tắc dưới đây.
+> **Lưu ý bắt buộc:** Sau khi thêm/sửa chức năng, Agent PHẢI cập nhật các file tài liệu `project.md`, `connection.md`, `agent.md`, `version.md` (và `THIRD-PARTY-NOTICES.md` nếu có thư viện mới) để phản ánh thay đổi.
 
 ---
 
@@ -17,6 +18,7 @@
 | **Tài liệu dự án** | `project.md` | Cấu trúc chi tiết dự án |
 | **Luồng dữ liệu** | `connection.md` | Sơ đồ liên kết, API PyWebView và luồng dữ liệu |
 | **Nhật ký phiên bản** | `version.md` | Lịch sử cập nhật và các tính năng sắp ra mắt |
+| **Giấy phép OSS** | `THIRD-PARTY-NOTICES.md` | Thông báo bản quyền/giấy phép các thư viện OSS (Three.js, Vue, PyWebView) |
 
 ---
 
@@ -152,4 +154,5 @@ Mỗi khi thực hiện một thay đổi hoặc tính năng mới, Agent hãy t
 - [ ] Phép tính độ dài hoặc kích thước có vô tình lấy từ toạ độ hiển thị (`preview`) thay vì toạ độ gốc (`geometry`) không?
 - [ ] Các thanh kéo co giãn chiều rộng (`resizer-vertical-right-panel`) và chiều cao (`resizer-horizontal-viewer`) có còn hoạt động bình thường không?
 - [ ] Thumbnail có giữ được tính năng vẽ lười (`IntersectionObserver`) và cache không?
+- [ ] Nút ℹ️ (Giấy phép & Phiên bản) mở modal đúng, hai tab render Markdown preview không lỗi?
 - [ ] Checksum và cú pháp phân tích BVBS có được giữ nguyên vẹn không?

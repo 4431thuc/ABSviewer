@@ -16,6 +16,7 @@ Hệ thống hoạt động theo mô hình kép:
 ABSviewer/
 ├── index.html          # Khung giao diện chính (HTML layout, Vue template, liên kết assets)
 ├── README.md           # Giới thiệu tóm tắt dự án
+├── THIRD-PARTY-NOTICES.md # Giấy phép & thông báo bản quyền các thư viện OSS (Three.js, Vue, PyWebView)
 ├── version.md          # Lịch sử phiên bản (Changelog) và tính năng sắp ra mắt
 ├── project.md          # [Tài liệu này] Mô tả tổng thể và cấu trúc dự án
 ├── connection.md       # Chi tiết kiến trúc liên kết, luồng dữ liệu và API
@@ -40,7 +41,7 @@ ABSviewer/
   - Google Analytics Tag (gtag).
   - `js/app.js`: Script ứng dụng gắn kết Vue instance vào `#app`.
 - **Cấu trúc DOM chính:**
-  - `header.toolbar`: Thanh công cụ trên cùng (các nút Open ABS, Reload, Clear, Expand/Collapse, Tên dự án, Fit View, Bật/Tắt Dim).
+  - `header.toolbar`: Thanh công cụ trên cùng (các nút Open ABS, Reload, Clear, Expand/Collapse, Tên dự án, Fit View, Bật/Tắt Dim, nút ℹ️ Giấy phép & Phiên bản).
   - `main.main-layout`:
     - `section.center-panel`: Bảng dữ liệu cốt thép trung tâm, hỗ trợ **kéo thả tệp `.abs` trực tiếp (Drag & Drop)** kèm lớp phủ `drop-overlay`, danh sách nhóm tệp (File Groups), bảng vị trí thép (`table.abs-table`), thumbnail canvas preview cho từng cây thép/lưới thép, cảnh báo chiều dài, cảnh báo mác thép, tổng kết footer.
     - `div.resizer-vertical-right-panel`: Thanh kéo co giãn chiều rộng thanh công cụ bên phải.
@@ -51,6 +52,7 @@ ABSviewer/
       - `div.property-panel`: Bảng chi tiết thông số vị trí thép đang chọn (Pos badge, kích thước, khối lượng, mác thép, Coupler đầu/cuối, tên file).
   - `footer.statusbar`: Thanh trạng thái hiển thị tiến độ và tổng số vị trí đã nạp.
   - `div.modal-backdrop`: Hộp thoại Modal Popup xác nhận khi phát hiện tệp trùng tên trong thao tác kéo thả (Yes để thay thế dữ liệu & thêm mới, No để hủy thao tác).
+  - `div.modal-backdrop` (info): Hộp thoại Modal Popup hiển thị giấy phép thư viện OSS (`THIRD-PARTY-NOTICES.md`) và lịch sử phiên bản (`version.md`) dạng Markdown preview, có 2 tab "Giấy phép" / "Phiên bản".
 
 ### 3.2. `css/style.css`
 - **Vai trò:** Hệ thống stylesheet hoàn chỉnh không phụ thuộc CSS framework bên ngoài (không dùng Bootstrap hay Tailwind).
@@ -75,7 +77,7 @@ ABSviewer/
   4. **Khung nhìn 2D (Viewer 2D):** Sử dụng Canvas 2D HTML5, hỗ trợ zoom mượt quanh con trỏ chuột, rê chuột để pan, double-click fit view, vẽ lưới toạ độ thông minh, đường bao bounding box, đánh dấu múp nối (coupler), đường đo kích thước (dimension) tự đẩy ra ngoài tâm hình dạng, và hiển thị góc bẻ khác 90°.
   5. **Bộ điều khiển xoay 3D (Orbit Controls):** Triển khai tự chế, hỗ trợ xoay, pan (chuột giữa/phải), zoom (con lăn hoặc pinch 2 ngón tay trên màn hình cảm ứng).
   6. **Khung nhìn 3D (3D Viewer):** Dựng hình Three.js chân thực bằng `CylinderGeometry` từng đoạn thẳng (giữ đúng góc bẻ 90°, 135°...), gắn khớp nối cầu `SphereGeometry` chống hở, đánh dấu điểm đầu bằng khối cầu đỏ, và hiển thị nhãn kích thước từng đoạn thẳng dạng HTML overlay đồng bộ toạ độ 3D theo từng khung hình.
-  7. **Khối ứng dụng Vue 3 (Vue Application):** Sử dụng Options API quản lý trạng thái, đồng bộ dữ liệu giữa bảng danh sách, thanh công cụ, bảng thuộc tính, hai khung nhìn 2D/3D, và bộ xử lý **Drag & Drop** (`onDragEnter`, `onDragOver`, `onDragLeave`, `onDrop`, `handleDroppedFiles`, `replaceAndAddFiles`).
+  7. **Khối ứng dụng Vue 3 (Vue Application):** Sử dụng Options API quản lý trạng thái, đồng bộ dữ liệu giữa bảng danh sách, thanh công cụ, bảng thuộc tính, hai khung nhìn 2D/3D, bộ xử lý **Drag & Drop** (`onDragEnter`, `onDragOver`, `onDragLeave`, `onDrop`, `handleDroppedFiles`, `replaceAndAddFiles`), và modal thông tin (giấy phép + phiên bản) với renderer Markdown `renderMarkdown()`.
 
 ---
 

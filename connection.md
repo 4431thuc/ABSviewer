@@ -122,6 +122,15 @@ Người dùng có thể kéo thả trực tiếp một hoặc nhiều tệp `.a
    - **Chọn YES (`confirmDuplicateDrop`):** Kích hoạt `replaceAndAddFiles()`: cập nhật thay thế nội dung của các tệp trùng tên, giữ nguyên vị trí của chúng, bổ sung các tệp mới không trùng vào cuối danh sách, xóa cache thumbnails và làm mới toàn bộ bảng băm `recordIndex` cũng như render lại view.
    - **Chọn NO (`cancelDuplicateDrop`):** Hủy bỏ toàn bộ thao tác nạp tệp, giữ nguyên vẹn dữ liệu dự án hiện tại.
 
+### 2.5. Modal Thông Tin (Giấy phép & Phiên bản)
+Nút ℹ️ trên `.toolbar-right` mở hộp thoại Modal Popup (`showLicenseModal`) hiển thị:
+- Tab **Giấy phép**: nội dung `THIRD-PARTY-NOTICES.md` (giấy phép Three.js MIT, Vue 3 MIT, PyWebView BSD-3-Clause) kèm thông tin tác giả "Sản phẩm cá nhân của thuc.hoang — MACZT VietNam".
+- Tab **Phiên bản**: nội dung `version.md` (lịch sử phiên bản và Coming Soon).
+
+Nội dung được nhúng trong `<script type="text/plain" id="license-text">` và `<script type="text/plain" id="version-text">` trong `index.html`, nạp vào Vue state (`licenseText`, `versionText`) trong `mounted()`, và render thành HTML qua hàm `renderMarkdown()` (hỗ trợ heading, list, bold, inline code, code fence, horizontal rule) bằng `v-html` trong `.md-preview`.
+
+---
+
 ---
 
 ## 3. Luồng dữ liệu chi tiết (End-to-End Data Flow)
