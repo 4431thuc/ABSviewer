@@ -1098,3 +1098,18 @@ body.dark .abs-table tbody tr:hover {
     from { transform: translateY(12px) scale(0.98); opacity: 0; }
     to { transform: translateY(0) scale(1); opacity: 1; }
 }
+/* --- Markdown preview (license/version modal) --- */
+.md-preview { font-size: 13px; line-height: 1.55; color: var(--text, #1e293b); max-height: 50vh; overflow-y: auto; padding: 4px 2px; }
+.md-preview h1 { font-size: 16px; margin: 10px 0 6px; color: #1e293b; }
+.md-preview h2 { font-size: 15px; margin: 12px 0 6px; color: #1e293b; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
+.md-preview h3 { font-size: 14px; margin: 10px 0 4px; color: #334155; }
+.md-preview p { margin: 6px 0; }
+.md-preview ul { margin: 6px 0 6px 20px; padding: 0; }
+.md-preview li { margin: 3px 0; }
+.md-preview code { background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 4px; padding: 1px 4px; font-size: 12px; font-family: Consolas, monospace; }
+.md-preview pre { background: #0f172a; color: #e2e8f0; border-radius: 6px; padding: 10px; overflow-x: auto; font-size: 12px; }
+.md-preview pre code { background: none; border: none; color: inherit; padding: 0; }
+
+.md-preview hr { border: none; border-top: 1px solid #e2e8f0; margin: 10px 0; }
+.md-preview strong { color: #0f172a; }
+

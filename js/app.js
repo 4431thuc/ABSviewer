@@ -1378,6 +1378,52 @@ const OrbitControls = {
  * 6. Vue Application
  * ========================================================================== */
 
+/**
+ * Minimal Markdown -> HTML renderer for the subset used in our docs
+ * (headings, lists, bold, inline code, horizontal rules, paragraphs).
+ * Content is trusted (local bundled docs).
+ */
+function renderMarkdown(md) {
+    if (!md) return '';
+    const lines = md.split(/\r?\n/);
+    let html = '';
+    let inUl = false;
+    let inCode = false;
+    let codeBuf = [];
+    const closeUl = () => { if (inUl) { html += '</ul>'; inUl = false; } };
+    const flushCode = () => { if (codeBuf.length) { html += '<pre><code>' + codeBuf.join('\n').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</code></pre>'; codeBuf = []; } };
+    const inline = (s) => s
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/`([^`]+)`/g, '<code>$1</code>');
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const trimmed = line.trim();
+        if (/^```/.test(trimmed)) {
+            if (inCode) { flushCode(); inCode = false; }
+            else { closeUl(); inCode = true; }
+            continue;
+        }
+        if (inCode) { codeBuf.push(line); continue; }
+        if (trimmed === '') { closeUl(); continue; }
+        if (/^---+$/.test(trimmed)) { closeUl(); html += '<hr>'; continue; }
+        if (/^###\s+/.test(trimmed)) { closeUl(); html += '<h3>' + inline(trimmed.replace(/^###\s+/, '')) + '</h3>'; continue; }
+        if (/^##\s+/.test(trimmed)) { closeUl(); html += '<h2>' + inline(trimmed.replace(/^##\s+/, '')) + '</h2>'; continue; }
+        if (/^#\s+/.test(trimmed)) { closeUl(); html += '<h1>' + inline(trimmed.replace(/^#\s+/, '')) + '</h1>'; continue; }
+        if (/^[-*]\s+/.test(trimmed)) {
+            if (!inUl) { html += '<ul>'; inUl = true; }
+            html += '<li>' + inline(trimmed.replace(/^[-*]\s+/, '')) + '</li>';
+            continue;
+        }
+        closeUl();
+        html += '<p>' + inline(trimmed) + '</p>';
+    }
+    if (inCode) flushCode();
+    closeUl();
+    return html;
+}
+
+
 const app = Vue.createApp({
     data() {
         return {
@@ -1421,11 +1467,17 @@ const app = Vue.createApp({
                 duplicates: [],
                 newFiles: [],
                 pendingFiles: null
-            }
+            },
+            showLicenseModal: false,
+            licenseText: '',
+            versionText: '',
+            infoTab: 'license'
         };
     },
 
     computed: {
+        licenseHtml() { return renderMarkdown(this.licenseText); },
+        versionHtml() { return renderMarkdown(this.versionText); },
         totalWeight() {
             // Header "e" is the weight of one bar; multiply by quantity.
             return this.allRecords.reduce((sum, r) => sum + ((r.weight || 0) * (r.quantity || 1)), 0);
@@ -2544,6 +2596,10 @@ const app = Vue.createApp({
         this.init3D();
         this.initResizers();
         this.setupThumbnailObserver();
+        const licenseEl = document.getElementById('license-text');
+        if (licenseEl) this.licenseText = licenseEl.textContent || '';
+        const versionEl = document.getElementById('version-text');
+        if (versionEl) this.versionText = versionEl.textContent || '';
         window.addEventListener('resize', this.onResize);
     },
 
