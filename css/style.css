@@ -25,6 +25,10 @@
 }
 
 /* --- Thiết lập Reset & Kiểu cơ bản trình duyệt --- */
+[v-cloak] {
+    display: none !important;
+}
+
 * {
     margin: 0;
     padding: 0;
@@ -912,4 +916,185 @@ body.dark .abs-table tbody tr:nth-child(even) {
 
 body.dark .abs-table tbody tr:hover {
     background: #394354;
+}
+
+/* --- Vùng kéo thả tệp tin trên bảng trung tâm (Drag & Drop Overlay) --- */
+.center-panel {
+    position: relative;
+}
+
+.center-panel.drag-over {
+    outline: 2px dashed var(--primary);
+    outline-offset: -3px;
+    background: #f0f6ff;
+}
+
+.drop-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(232, 242, 255, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+    pointer-events: none;
+    backdrop-filter: blur(2px);
+}
+
+.drop-overlay-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 24px 36px;
+    background: white;
+    border: 2px dashed var(--primary);
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(45, 116, 255, 0.18);
+}
+
+.drop-overlay-icon {
+    font-size: 40px;
+}
+
+.drop-overlay-text {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--primary-dark);
+}
+
+/* --- Hộp thoại xác nhận thay thế tệp trùng tên (Confirmation Modal) --- */
+.modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    backdrop-filter: blur(3px);
+    animation: modalFadeIn .15s ease-out;
+}
+
+.modal-dialog {
+    background: white;
+    width: 90%;
+    max-width: 480px;
+    border-radius: 10px;
+    box-shadow: 0 16px 36px rgba(0, 0, 0, 0.25);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    animation: modalSlideUp .18s ease-out;
+}
+
+.modal-header {
+    height: 48px;
+    padding: 0 18px;
+    background: #fff8f0;
+    border-bottom: 1px solid #fed7aa;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.modal-icon {
+    font-size: 20px;
+}
+
+.modal-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #9a3412;
+}
+
+.modal-body {
+    padding: 18px;
+    font-size: 14px;
+    color: var(--text);
+    line-height: 1.5;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+.duplicate-file-list {
+    margin: 10px 0;
+    padding: 8px 12px;
+    background: #f8fafc;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    list-style: none;
+    max-height: 120px;
+    overflow-y: auto;
+}
+
+.duplicate-file-list li {
+    padding: 4px 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: #334155;
+    border-bottom: 1px dashed #e2e8f0;
+}
+
+.duplicate-file-list li:last-child {
+    border-bottom: none;
+}
+
+.modal-question {
+    margin-top: 14px;
+    font-weight: 500;
+    color: #1e293b;
+}
+
+.modal-footer {
+    padding: 12px 18px;
+    background: #f8fafc;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+/* Các nút bấm trong modal xác nhận */
+.modal-footer .btn {
+    height: 36px;
+    padding: 0 16px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: .15s;
+}
+
+.modal-footer .btn-secondary {
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    color: #475569;
+}
+
+.modal-footer .btn-secondary:hover {
+    background: #e2e8f0;
+    color: #1e293b;
+}
+
+.modal-footer .btn-primary {
+    background: var(--primary);
+    border: 1px solid var(--primary-dark);
+    color: white;
+}
+
+.modal-footer .btn-primary:hover {
+    background: var(--primary-dark);
+}
+
+@keyframes modalFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes modalSlideUp {
+    from { transform: translateY(12px) scale(0.98); opacity: 0; }
+    to { transform: translateY(0) scale(1); opacity: 1; }
 }

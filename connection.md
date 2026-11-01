@@ -29,6 +29,7 @@ graph TD
         Thumb[Module ThumbnailRenderer]
         V2D[Module Viewer2D]
         V3D[Module 3D Viewer & OrbitControls]
+        DragDrop[Drag & Drop & Modal Handler]
     end
 
     Index --> CSS
@@ -44,6 +45,7 @@ graph TD
     State -->|IntersectionObserver quan sát DOM| Thumb
     State -->|Chế độ 2D: selectRecord| V2D
     State -->|Chế độ 3D: selectRecord| V3D
+    State -->|Sự kiện Drop trên center-panel| DragDrop
     ThreeMin -.->|Cung cấp đối tượng THREE.*| V3D
 ```
 
@@ -80,7 +82,7 @@ Khi chạy trong Desktop Shell được bọc bởi Python PyWebView, ứng dụ
        }
      ]
      ```
-   - **Xử lý bên JS:** Giao mảng kết quả cho phương thức `addFiles(result)` của Vue.
+   - **Xử lý bên JS:** Giao mảng kết quả cho phương thức xử lý tệp tập trung `processIncomingFiles(result)` của Vue (kiểm tra trùng tên và xử lý thay thế/bổ sung).
 
 2. **`api.reload_file(path)`**
    - **Tham số:** `path` (chuỗi đường dẫn tệp tuyệt đối trên ổ cứng).
@@ -93,22 +95,39 @@ Khi chạy trong Desktop Shell được bọc bởi Python PyWebView, ứng dụ
 
 4. **`api.save_settings(settingsObject)`**
    - **Mục đích:** Lưu lại thiết lập người dùng xuống đĩa (ví dụ `{ projectName: '...' }`).
-   - **Thời điểm gọi:** Sau khi nạp tệp thành công trong `addFiles()`.
+   - **Thời điểm gọi:** Sau khi nạp tệp thành công trong `addFiles()` và `replaceAndAddFiles()`.
 
 ### 2.3. Cơ chế Dự phòng Trình duyệt (Browser Fallback)
 Nếu `getApi()` trả về `null` (khi mở `index.html` trực tiếp bằng trình duyệt Google Chrome, Edge, Firefox):
 - Hàm `openViaBrowser()` sẽ tự động tạo một thẻ input ẩn:
   `<input type="file" id="hidden-file-input" multiple accept=".abs" style="display:none">`.
 - Lắng nghe sự kiện `change`, sử dụng đối tượng chuẩn `FileReader` (`readAsText()`) để đọc chuỗi văn bản của từng tệp.
-- Chuyển đổi dữ liệu sang cùng cấu trúc object như PyWebView trả về và chuyển vào `addFiles()`.
+- Chuyển đổi dữ liệu sang cùng cấu trúc object như PyWebView trả về và chuyển vào `processIncomingFiles(results)`.
 - **Kết quả:** Mọi tính năng phân tích cú pháp, render 2D/3D hoạt động 100% độc lập không cần backend!
+
+### 2.4. Cơ chế Kéo Thả Tệp (Drag & Drop) & Xử lý Trùng Tên
+Người dùng có thể kéo thả trực tiếp một hoặc nhiều tệp `.abs` từ File Explorer vào vùng `.center-panel`:
+1. **Lắng nghe sự kiện kéo thả:**
+   - `@dragenter.prevent="onDragEnter"` / `@dragleave="onDragLeave"`: Sử dụng biến đếm `dragCounter` để quản lý trạng thái `isDraggingOver` và hiển thị lớp phủ `.drop-overlay` mượt mà, không bị hiện tượng nhấp nháy (flicker) khi lướt qua các thẻ con.
+   - `@dragover.prevent="onDragOver"`: Thiết lập `dropEffect = 'copy'`.
+   - `@drop.prevent="onDrop"`: Thu thập danh sách `e.dataTransfer.files`.
+2. **Quy trình xử lý tệp kéo vào (`handleDroppedFiles`):**
+   - Lọc các tệp có đuôi `.abs` và đọc nội dung song song bằng `FileReader`.
+   - **Tình huống 1: Chưa có tệp nào đang mở:** Nạp toàn bộ các tệp kéo vào qua `addFiles()`.
+   - **Tình huống 2: Đã có sẵn tệp:**
+     - Kiểm tra tên tệp so với danh sách `this.files`.
+     - *Nếu không có tệp trùng tên:* Mở bổ sung toàn bộ vào danh sách hiện có.
+     - *Nếu phát hiện tệp trùng tên:* Kích hoạt Modal Popup (`duplicateConfirmModal.show = true`) liệt kê danh sách các tệp bị trùng.
+3. **Phản hồi từ Modal Popup:**
+   - **Chọn YES (`confirmDuplicateDrop`):** Kích hoạt `replaceAndAddFiles()`: cập nhật thay thế nội dung của các tệp trùng tên, giữ nguyên vị trí của chúng, bổ sung các tệp mới không trùng vào cuối danh sách, xóa cache thumbnails và làm mới toàn bộ bảng băm `recordIndex` cũng như render lại view.
+   - **Chọn NO (`cancelDuplicateDrop`):** Hủy bỏ toàn bộ thao tác nạp tệp, giữ nguyên vẹn dữ liệu dự án hiện tại.
 
 ---
 
 ## 3. Luồng dữ liệu chi tiết (End-to-End Data Flow)
 
 ### Bước 1: Tiếp nhận tệp & Tích lũy chuỗi
-1. Người dùng bấm **📂 Open ABS**.
+1. Người dùng bấm **📂 Open ABS** hoặc kéo thả tệp vào vùng `.center-panel`.
 2. Nhận danh sách tệp chứa chuỗi text thô.
 3. Kích hoạt `ABSParser.parse(rawText, fileName, fileIndex)`.
 4. Trình phân tích giải quyết vấn đề tự xuống dòng (line-wrap) của các trình soạn thảo: cộng dồn chuỗi vào biến `pending` cho đến khi gặp dấu kết thúc checksum `C<digits>@` rồi mới phân tách theo tiền tố chuẩn `BF(2D|3D|WE|MA|GT|AU)@`.
@@ -188,4 +207,3 @@ Khi người dùng bấm chọn một dòng trên bảng (`selectRecord(item)`):
   - Tạo các thẻ `<div class="segment-label">` nổi trực tiếp trên canvas WebGL.
   - Trong vòng lặp hoạt họa `animate3D()` (`requestAnimationFrame`), mỗi khung hình tính tọa độ trung điểm đoạn thẳng 3D, dùng hàm `vector.project(camera3D)` để lấy tọa độ màn hình 2D tương ứng và gán vào `style.left`, `style.top`.
   - Tự động ẩn (`opacity = 0`) nếu điểm nằm phía sau camera ($NDC.z \notin [-1, 1]$) hoặc vượt ngoài viền khung nhìn.
-

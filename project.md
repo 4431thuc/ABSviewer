@@ -16,6 +16,7 @@ Hệ thống hoạt động theo mô hình kép:
 ABSviewer/
 ├── index.html          # Khung giao diện chính (HTML layout, Vue template, liên kết assets)
 ├── README.md           # Giới thiệu tóm tắt dự án
+├── version.md          # Lịch sử phiên bản (Changelog) và tính năng sắp ra mắt
 ├── project.md          # [Tài liệu này] Mô tả tổng thể và cấu trúc dự án
 ├── connection.md       # Chi tiết kiến trúc liên kết, luồng dữ liệu và API
 ├── agent.md            # Sổ tay hướng dẫn và các lưu ý bắt buộc cho AI Agent
@@ -41,7 +42,7 @@ ABSviewer/
 - **Cấu trúc DOM chính:**
   - `header.toolbar`: Thanh công cụ trên cùng (các nút Open ABS, Reload, Clear, Expand/Collapse, Tên dự án, Fit View, Bật/Tắt Dim).
   - `main.main-layout`:
-    - `section.center-panel`: Danh sách nhóm tệp (File Groups), bảng vị trí thép (`table.abs-table`), thumbnail canvas preview cho từng cây thép/lưới thép, cảnh báo chiều dài, cảnh báo mác thép, tổng kết footer.
+    - `section.center-panel`: Bảng dữ liệu cốt thép trung tâm, hỗ trợ **kéo thả tệp `.abs` trực tiếp (Drag & Drop)** kèm lớp phủ `drop-overlay`, danh sách nhóm tệp (File Groups), bảng vị trí thép (`table.abs-table`), thumbnail canvas preview cho từng cây thép/lưới thép, cảnh báo chiều dài, cảnh báo mác thép, tổng kết footer.
     - `div.resizer-vertical-right-panel`: Thanh kéo co giãn chiều rộng thanh công cụ bên phải.
     - `section.right-panel`:
       - `div.viewer-tabs`: Chuyển đổi qua lại giữa chế độ xem 2D và 3D.
@@ -49,6 +50,7 @@ ABSviewer/
       - `div.resizer-horizontal-viewer`: Thanh kéo co giãn chiều cao của khung xem đồ họa.
       - `div.property-panel`: Bảng chi tiết thông số vị trí thép đang chọn (Pos badge, kích thước, khối lượng, mác thép, Coupler đầu/cuối, tên file).
   - `footer.statusbar`: Thanh trạng thái hiển thị tiến độ và tổng số vị trí đã nạp.
+  - `div.modal-backdrop`: Hộp thoại Modal Popup xác nhận khi phát hiện tệp trùng tên trong thao tác kéo thả (Yes để thay thế dữ liệu & thêm mới, No để hủy thao tác).
 
 ### 3.2. `css/style.css`
 - **Vai trò:** Hệ thống stylesheet hoàn chỉnh không phụ thuộc CSS framework bên ngoài (không dùng Bootstrap hay Tailwind).
@@ -58,6 +60,8 @@ ABSviewer/
   - Bảng dữ liệu kỹ thuật: highlight dòng chọn, phân biệt style cho thép tròn (`.pos-ellipse`) và lưới thép (`.pos-rect`, `.bfma-row`).
   - Đánh dấu cảnh báo trực quan: Thép dài 12m-14m (`.length-warn-1` màu cam), dài >14m (`.length-warn-2` màu đỏ), khác mác thép chủ đạo trong file (`.grade-diff`).
   - Style cho nhãn kích thước nổi 3D: `.segment-label` với thuộc tính absolute và chuyển đổi `translate(-50%, -50%)`.
+  - Hiệu ứng kéo thả tệp: `.center-panel.drag-over`, `.drop-overlay`, `.drop-overlay-box`.
+  - Hộp thoại Modal Popup: `.modal-backdrop`, `.modal-dialog`, `.duplicate-file-list`, `.btn-primary`, `.btn-secondary`.
 
 ### 3.3. `js/three.min.js`
 - **Vai trò:** Thư viện WebGL 3D độc lập được lưu trữ nội bộ (local) để đảm bảo ứng dụng chạy offline ổn định trong môi trường Desktop PyWebView.
@@ -71,7 +75,7 @@ ABSviewer/
   4. **Khung nhìn 2D (Viewer 2D):** Sử dụng Canvas 2D HTML5, hỗ trợ zoom mượt quanh con trỏ chuột, rê chuột để pan, double-click fit view, vẽ lưới toạ độ thông minh, đường bao bounding box, đánh dấu múp nối (coupler), đường đo kích thước (dimension) tự đẩy ra ngoài tâm hình dạng, và hiển thị góc bẻ khác 90°.
   5. **Bộ điều khiển xoay 3D (Orbit Controls):** Triển khai tự chế, hỗ trợ xoay, pan (chuột giữa/phải), zoom (con lăn hoặc pinch 2 ngón tay trên màn hình cảm ứng).
   6. **Khung nhìn 3D (3D Viewer):** Dựng hình Three.js chân thực bằng `CylinderGeometry` từng đoạn thẳng (giữ đúng góc bẻ 90°, 135°...), gắn khớp nối cầu `SphereGeometry` chống hở, đánh dấu điểm đầu bằng khối cầu đỏ, và hiển thị nhãn kích thước từng đoạn thẳng dạng HTML overlay đồng bộ toạ độ 3D theo từng khung hình.
-  7. **Khối ứng dụng Vue 3 (Vue Application):** Sử dụng Options API quản lý trạng thái, đồng bộ dữ liệu giữa bảng danh sách, thanh công cụ, bảng thuộc tính và hai khung nhìn 2D/3D.
+  7. **Khối ứng dụng Vue 3 (Vue Application):** Sử dụng Options API quản lý trạng thái, đồng bộ dữ liệu giữa bảng danh sách, thanh công cụ, bảng thuộc tính, hai khung nhìn 2D/3D, và bộ xử lý **Drag & Drop** (`onDragEnter`, `onDragOver`, `onDragLeave`, `onDrop`, `handleDroppedFiles`, `replaceAndAddFiles`).
 
 ---
 
@@ -83,6 +87,7 @@ ABSviewer/
 | **Vue.js** | 3.x | CDN Global Script | Quản lý trạng thái giao diện phản ứng (Reactive UI) |
 | **Three.js** | Minified bundle | Tệp cục bộ `js/three.min.js` | Dựng hình đồ hoạ không gian 3D WebGL |
 | **PyWebView Bridge** | - | Nhúng qua `window.pywebview` | Tương tác với Python backend trên môi trường desktop |
+| **HTML5 Drag & Drop API** | Native | Tích hợp vào `.center-panel` | Mở đồng thời nhiều tệp .abs bằng thao tác kéo thả chuột |
 | **BVBS Specification** | 3.1 | Thuật toán tự phát triển | Phân tích cú pháp chuỗi chuẩn uốn thép công nghiệp |
 | **HTML5 Canvas 2D** | Native | Trực tiếp qua JS Context | Render đồ họa 2D kỹ thuật chính xác cao & thumbnails |
 
@@ -99,4 +104,3 @@ Hệ thống hỗ trợ đầy đủ các nhóm hình học chính (Obergruppen)
 - **`BFAU`**: Thanh kê/thanh chống định khoảng cách (Abstandhalter).
 - **Khối nối Coupler / Muffler (`M`)**: Trích xuất nhà sản xuất và mã chủng loại cho đầu thanh (`a`, `b`) và cuối thanh (`n`, `o`).
 - **Khối Kiểm tra Checksum (`C`)**: Thuật toán `IP = 96 - (sum(ASCII) mod 32)`.
-

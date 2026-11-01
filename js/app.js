@@ -1,4 +1,4 @@
-/* =============================================================================
+﻿/* =============================================================================
  * ABS Viewer - js/app.js
  * -----------------------------------------------------------------------------
  * Single-file Vue 3 application for the ABS Viewer.
@@ -682,8 +682,9 @@ const ThumbnailRenderer = {
         const points = record.preview && record.preview.points ? record.preview.points : null;
         if (points && points.length >= 2) {
             this.drawShape(ctx, record, points, w, h);
+            this.cache.set(record.id, true);
         }
-        this.cache.set(record.id, true);
+// cache set inside if block
     },
 
     /** Draw a polyline fit into the canvas with padding. */
@@ -1411,7 +1412,16 @@ const app = Vue.createApp({
             _startX: 0,
             _startY: 0,
             _startWidth: 0,
-            _startHeight: 0
+            _startHeight: 0,
+            // Drag and drop state
+            isDraggingOver: false,
+            dragCounter: 0,
+            duplicateConfirmModal: {
+                show: false,
+                duplicates: [],
+                newFiles: [],
+                pendingFiles: null
+            }
         };
     },
 
@@ -1562,6 +1572,7 @@ const app = Vue.createApp({
 
         /** Merge parsed files into the project. */
         addFiles(newFiles) {
+            ThumbnailRenderer.cache.clear();
             for (const raw of newFiles) {
                 if (!raw.text) continue;
                 const index = this.files.length;
@@ -1600,7 +1611,205 @@ const app = Vue.createApp({
                 this.expandedFiles[raw.path] = true;
             }
             this.buildRecordIndex();
-            this.status = `${this.allRecords.length} positions loaded`;
+            this.status = this.allRecords.length + ' positions loaded';
+            this.updateViewer();
+            this.saveSettings();
+            this.$nextTick(() => this.setupThumbnailObserver());
+        },
+
+        /* ------------------------------------------------------------------
+         * Unified File Ingestion & Duplicate Name Check
+         * ---------------------------------------------------------------- */
+
+        /**
+         * Xử lý nạp file tập trung cho cả nút Open ABS và Kéo thả (Drag & Drop).
+         * Kiểm tra trùng tên, nếu có trùng thì hiện popup hỏi thay thế/hủy.
+         */
+        processIncomingFiles(rawFiles) {
+            if (!rawFiles || !rawFiles.length) return;
+
+            const validFiles = rawFiles.filter(f => f && f.name && f.name.toLowerCase().endsWith('.abs') && f.text);
+            if (!validFiles.length) {
+                notify('Không tìm thấy tệp .abs nào hợp lệ', 'error');
+                return;
+            }
+
+            // Nếu dự án chưa có file nào: mở toàn bộ ngay
+            if (!this.files.length) {
+                this.addFiles(validFiles);
+                notify('Đã mở thành công ' + validFiles.length + ' tệp .abs', 'success');
+                return;
+            }
+
+            // Đã có sẵn file: kiểm tra trùng tên file (không phân biệt hoa thường)
+            const duplicates = [];
+            const newFiles = [];
+            for (const raw of validFiles) {
+                const isDup = this.files.some(f => f.name.toLowerCase() === raw.name.toLowerCase());
+                if (isDup) {
+                    duplicates.push(raw.name);
+                } else {
+                    newFiles.push(raw.name);
+                }
+            }
+
+            // Không có file trùng tên: mở bổ sung toàn bộ
+            if (duplicates.length === 0) {
+                this.addFiles(validFiles);
+                notify('Đã mở bổ sung ' + validFiles.length + ' tệp .abs', 'success');
+                return;
+            }
+
+            // Có file trùng tên: mở modal xác nhận
+            this.duplicateConfirmModal = {
+                show: true,
+                duplicates: duplicates,
+                newFiles: newFiles,
+                pendingFiles: validFiles
+            };
+        },
+
+        /* ------------------------------------------------------------------
+         * Drag and drop handlers (kéo thả file .abs vào center-panel)
+         * ---------------------------------------------------------------- */
+
+        onDragEnter(e) {
+            this.dragCounter++;
+            this.isDraggingOver = true;
+        },
+
+        onDragOver(e) {
+            e.dataTransfer.dropEffect = 'copy';
+        },
+
+        onDragLeave(e) {
+            this.dragCounter--;
+            if (this.dragCounter <= 0) {
+                this.dragCounter = 0;
+                this.isDraggingOver = false;
+            }
+        },
+
+        async onDrop(e) {
+            this.dragCounter = 0;
+            this.isDraggingOver = false;
+            const dt = e.dataTransfer;
+            if (!dt || !dt.files || dt.files.length === 0) return;
+            const fileList = Array.from(dt.files);
+            await this.handleDroppedFiles(fileList);
+        },
+
+        async handleDroppedFiles(fileList) {
+            const absFiles = fileList.filter(f => f.name.toLowerCase().endsWith('.abs'));
+            if (!absFiles.length) {
+                notify('Không tìm thấy tệp .abs nào hợp lệ', 'error');
+                return;
+            }
+
+            this.status = 'Đang đọc ' + absFiles.length + ' tệp kéo vào...';
+            const readers = absFiles.map(f => this.readFileAsText(f));
+            const texts = await Promise.all(readers);
+
+            const droppedRaw = absFiles.map((f, i) => ({
+                name: f.name,
+                path: f.name,
+                folder: '',
+                size: f.size,
+                text: texts[i]
+            }));
+
+            this.processIncomingFiles(droppedRaw);
+        },
+
+        confirmDuplicateDrop() {
+            if (!this.duplicateConfirmModal.pendingFiles) return;
+            const pending = this.duplicateConfirmModal.pendingFiles;
+            const dupCount = this.duplicateConfirmModal.duplicates.length;
+            const newCount = this.duplicateConfirmModal.newFiles.length;
+
+            this.replaceAndAddFiles(pending);
+
+            this.duplicateConfirmModal.show = false;
+            this.duplicateConfirmModal.pendingFiles = null;
+            notify('Đã thay thế ' + dupCount + ' tệp và thêm ' + newCount + ' tệp mới', 'success');
+        },
+
+        cancelDuplicateDrop() {
+            this.duplicateConfirmModal.show = false;
+            this.duplicateConfirmModal.pendingFiles = null;
+            notify('Đã hủy thao tác mở tệp', 'info');
+        },
+
+        replaceAndAddFiles(newRawFiles) {
+            for (const raw of newRawFiles) {
+                if (!raw.text) continue;
+                const dupIdx = this.files.findIndex(f => f.name.toLowerCase() === raw.name.toLowerCase());
+                if (dupIdx !== -1) {
+                    // Thay thế file hiện có
+                    const parsed = ABSParser.parse(raw.text, raw.name, dupIdx);
+                    parsed.records.sort((a, b) => {
+                        const isAMesh = a.type === 'BFMA';
+                        const isBMesh = b.type === 'BFMA';
+                        if (isAMesh && !isBMesh) return 1;
+                        if (!isAMesh && isBMesh) return -1;
+                        return String(a.position).localeCompare(String(b.position), undefined, { numeric: true });
+                    });
+                    const totalWeight = parsed.records.reduce((s, r) => s + r.weightTotal, 0);
+                    const rebarWeight = parsed.records.filter(r => r.type !== 'BFMA').reduce((s, r) => s + r.weightTotal, 0);
+                    const meshWeight = totalWeight - rebarWeight;
+                    this.files[dupIdx] = {
+                        ...raw,
+                        index: dupIdx,
+                        records: parsed.records,
+                        rebarWeight: rebarWeight,
+                        meshWeight: meshWeight,
+                        weight: totalWeight,
+                        bars: parsed.records.reduce((s, r) => s + (r.quantity || 0), 0)
+                    };
+                    this.expandedFiles[this.files[dupIdx].path] = true;
+                } else {
+                    // Thêm mới file không trùng tên
+                    const index = this.files.length;
+                    const parsed = ABSParser.parse(raw.text, raw.name, index);
+                    parsed.records.sort((a, b) => {
+                        const isAMesh = a.type === 'BFMA';
+                        const isBMesh = b.type === 'BFMA';
+                        if (isAMesh && !isBMesh) return 1;
+                        if (!isAMesh && isBMesh) return -1;
+                        return String(a.position).localeCompare(String(b.position), undefined, { numeric: true });
+                    });
+                    const totalWeight = parsed.records.reduce((s, r) => s + r.weightTotal, 0);
+                    const rebarWeight = parsed.records.filter(r => r.type !== 'BFMA').reduce((s, r) => s + r.weightTotal, 0);
+                    const meshWeight = totalWeight - rebarWeight;
+                    const file = {
+                        ...raw,
+                        index: index,
+                        records: parsed.records,
+                        rebarWeight: rebarWeight,
+                        meshWeight: meshWeight,
+                        weight: totalWeight,
+                        bars: parsed.records.reduce((s, r) => s + (r.quantity || 0), 0)
+                    };
+                    this.files.push(file);
+                    this.expandedFiles[raw.path] = true;
+                }
+            }
+
+            // Đồng bộ lại toàn bộ allRecords và re-index
+            const all = [];
+            this.files.forEach((file, fileIdx) => {
+                file.index = fileIdx;
+                file.records.forEach((r, rIdx) => {
+                    r.id = 'f' + fileIdx + '_r' + rIdx;
+                    r.fileIndex = fileIdx;
+                });
+                all.push(...file.records);
+            });
+            this.allRecords = all;
+
+            ThumbnailRenderer.cache.clear();
+            this.buildRecordIndex();
+            this.status = this.allRecords.length + ' positions loaded';
             this.updateViewer();
             this.saveSettings();
             this.$nextTick(() => this.setupThumbnailObserver());
@@ -1609,7 +1818,6 @@ const app = Vue.createApp({
         /* ------------------------------------------------------------------
          * Per-file toggle helpers
          * ---------------------------------------------------------------- */
-
         /** Toggle the expanded state of a file group. */
         toggleFile(file) {
             const key = file.path;

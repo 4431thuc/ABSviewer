@@ -10,12 +10,13 @@
 
 | Thành phần | Đường dẫn tệp | Vai trò |
 | :--- | :--- | :--- |
-| **Giao diện & DOM** | `index.html` | Cấu trúc trang, nạp Vue 3 CDN, Three.js local, khai báo layout |
-| **Định dạng & CSS** | `css/style.css` | Hệ thống biến `:root`, CSS Grid 3 cột, style bảng và nhãn 3D |
+| **Giao diện & DOM** | `index.html` | Cấu trúc trang, nạp Vue 3 CDN, Three.js local, khai báo layout và Modal |
+| **Định dạng & CSS** | `css/style.css` | Hệ thống biến `:root`, CSS Grid 3 cột, style bảng, nhãn 3D, drag overlay và modal |
 | **Thư viện WebGL** | `js/three.min.js` | Thư viện Three.js bản rút gọn nội bộ (không kèm OrbitControls) |
-| **Logic Ứng Dụng** | `js/app.js` | Parser BVBS, Viewer 2D, Viewer 3D, OrbitControls, Vue 3 App |
+| **Logic Ứng Dụng** | `js/app.js` | Parser BVBS, Viewer 2D, Viewer 3D, OrbitControls, Vue 3 App, Drag & Drop |
 | **Tài liệu dự án** | `project.md` | Cấu trúc chi tiết dự án |
 | **Luồng dữ liệu** | `connection.md` | Sơ đồ liên kết, API PyWebView và luồng dữ liệu |
+| **Nhật ký phiên bản** | `version.md` | Lịch sử cập nhật và các tính năng sắp ra mắt |
 
 ---
 
@@ -90,7 +91,17 @@
 
 ---
 
-### 2.6. Đặc tả Hình học Chuẩn BVBS 3.1
+### 2.6. Thao Tác Kéo Thả (Drag & Drop) & Quản Lý Tệp Trùng Tên
+1. **Quản lý sự kiện kéo thả:**
+   - Khi kéo tệp qua các phần tử con của `.center-panel`, sự kiện `dragleave` có thể kích hoạt liên tục. Bắt buộc duy trì biến đếm `this.dragCounter` để quản lý cờ `this.isDraggingOver`.
+   - Lớp phủ `.drop-overlay` phải luôn có `pointer-events: none` để không cản trở sự kiện thả tệp (`drop`).
+2. **Xử lý tệp trùng tên:**
+   - Không sử dụng `window.confirm()` (dễ bị chặn trong môi trường PyWebView hoặc hiển thị không đẹp mắt). Sử dụng Custom Modal component `duplicateConfirmModal` trong Vue.
+   - Khi thay thế tệp (`replaceAndAddFiles`): Cần re-index lại toàn bộ mảng `allRecords` (`r.id = 'f' + fileIdx + '_r' + rIdx`), làm sạch bộ nhớ cache hình thu nhỏ `ThumbnailRenderer.cache.clear()`, gọi `buildRecordIndex()` và đăng ký lại `setupThumbnailObserver()`.
+
+---
+
+### 2.7. Đặc tả Hình học Chuẩn BVBS 3.1
 Khi can thiệp vào `ABSParser`:
 1. **Quy tắc Checksum:** Khối `C<digits>@` được tính theo công thức:
    $$IP = 96 - (\sum ASCII \pmod{32})$$
@@ -103,7 +114,7 @@ Khi can thiệp vào `ABSParser`:
 
 ---
 
-### 2.7. Tối ưu Hiệu Năng (Performance Best Practices)
+### 2.8. Tối ưu Hiệu Năng (Performance Best Practices)
 1. **Lazy Loading cho Thumbnail:**
    Bảng danh sách có thể có hàng trăm hoặc hàng ngàn dòng. Các thumbnail chỉ được vẽ khi đi vào tầm nhìn qua `IntersectionObserver`. Sau khi vẽ xong phải lưu vào `ThumbnailRenderer.cache` (`Map`). Không gọi vẽ lại nếu đã có trong cache.
 2. **Bộ đệm tổng hợp (Pre-calculated Aggregates):**
@@ -133,10 +144,12 @@ Khi can thiệp vào `ABSParser`:
 
 Mỗi khi thực hiện một thay đổi hoặc tính năng mới, Agent hãy tự rà soát danh sách sau:
 - [ ] Ứng dụng có chạy được khi mở trực tiếp `index.html` trên trình duyệt mà không cần server backend không?
+- [ ] Tính năng kéo thả tệp `.abs` vào bảng trung tâm có hoạt động trơn tru không?
+- [ ] Khi kéo tệp trùng tên, Modal popup có cảnh báo đúng số lượng và hỏi thay thế không?
+- [ ] Khi bấm Yes trong popup, dữ liệu tệp cũ có được thay thế chính xác và bổ sung các tệp mới không? Bấm No có hủy bỏ an toàn không?
 - [ ] Các đối tượng Three.js mới có được bọc qua `Vue.markRaw()` chưa?
 - [ ] Có rò rỉ bộ nhớ WebGL nào chưa được `.dispose()` không?
 - [ ] Phép tính độ dài hoặc kích thước có vô tình lấy từ toạ độ hiển thị (`preview`) thay vì toạ độ gốc (`geometry`) không?
 - [ ] Các thanh kéo co giãn chiều rộng (`resizer-vertical-right-panel`) và chiều cao (`resizer-horizontal-viewer`) có còn hoạt động bình thường không?
 - [ ] Thumbnail có giữ được tính năng vẽ lười (`IntersectionObserver`) và cache không?
 - [ ] Checksum và cú pháp phân tích BVBS có được giữ nguyên vẹn không?
-

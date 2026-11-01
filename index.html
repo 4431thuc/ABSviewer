@@ -48,7 +48,7 @@
 
 <body>
 
-<div id="app">
+<div id="app" v-cloak>
 
     <!-- ========================================================= -->
     <!-- Toolbar -->
@@ -127,7 +127,21 @@
         <!-- CENTER -->
         <!-- ===================================================== -->
 
-        <section class="center-panel">
+        <section
+            class="center-panel"
+            :class="{'drag-over': isDraggingOver}"
+            @dragover.prevent="onDragOver"
+            @dragenter.prevent="onDragEnter"
+            @dragleave="onDragLeave"
+            @drop.prevent="onDrop">
+
+            <!-- Lớp phủ khi kéo tệp qua vùng bảng -->
+            <div v-if="isDraggingOver" class="drop-overlay">
+                <div class="drop-overlay-box">
+                    <span class="drop-overlay-icon">📥</span>
+                    <span class="drop-overlay-text">Thả các tệp .abs vào đây để mở</span>
+                </div>
+            </div>
             <!-- =============================================== -->
             <!-- File Groups (one abs-table per file, toggle) -->
             <!-- =============================================== -->
@@ -358,7 +372,8 @@
                 v-if="!files.length"
                 class="empty-table">
 
-                Open ABS files to begin
+                Open ABS files to begin, 
+                Drap and drop .abs files here to open 📃 👈
 
             </div>
 
@@ -565,6 +580,45 @@
         </div>
 
     </footer>
+
+    <!-- ========================================================= -->
+    <!-- Modal xác nhận thay thế tệp trùng tên khi kéo thả -->
+    <!-- ========================================================= -->
+    <div
+        v-if="duplicateConfirmModal.show"
+        class="modal-backdrop"
+        @click.self="cancelDuplicateDrop">
+
+        <div class="modal-dialog">
+
+            <div class="modal-header">
+                <span class="modal-icon">⚠️</span>
+                <span class="modal-title">Phát hiện tệp trùng tên</span>
+            </div>
+
+            <div class="modal-body">
+                <p>Có <strong>{{ duplicateConfirmModal.duplicates.length }}</strong> tệp trùng tên với tệp đang mở:</p>
+                <ul class="duplicate-file-list">
+                    <li v-for="name in duplicateConfirmModal.duplicates" :key="name">📄 {{ name }}</li>
+                </ul>
+                <p v-if="duplicateConfirmModal.newFiles.length > 0" style="margin-top: 8px;">
+                    Cùng với <strong>{{ duplicateConfirmModal.newFiles.length }}</strong> tệp mới sẽ được thêm vào.
+                </p>
+                <p class="modal-question">Bạn có muốn <strong>thay thế</strong> dữ liệu của các tệp trùng tên này không?</p>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn btn-secondary" @click="cancelDuplicateDrop">
+                    ❌ No (Hủy bỏ)
+                </button>
+                <button class="btn btn-primary" @click="confirmDuplicateDrop">
+                    ✅ Yes (Thay thế & Thêm mới)
+                </button>
+            </div>
+
+        </div>
+
+    </div>
 
 </div>
 
